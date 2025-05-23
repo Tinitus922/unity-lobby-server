@@ -8,7 +8,7 @@ app.use(express.json());
 
 let lobbies = [];
 
-function generateLobbyCode(length = 6) {
+function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
     for (let i = 0; i < length; i++) {
