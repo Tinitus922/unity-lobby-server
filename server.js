@@ -32,7 +32,7 @@ app.post('/register', (req, res) => {
         isPrivate: !!isPrivate,
         code: lobbyCode,
         createdAt: Date.now(),
-        lastHeartbeat: Date.now()  // NEU: Heartbeat-Zeit merken
+        lastHeartbeat: Date.now()
     };
 
     lobbies.push(lobby);
@@ -54,7 +54,7 @@ app.post('/heartbeat/:code', (req, res) => {
 app.get('/lobbies', (req, res) => {
     const { region } = req.query;
     const now = Date.now();
-    const activeLobbies = lobbies.filter(lobby => now - lobby.lastHeartbeat < 60000); // nur letzte 60 Sekunden aktiv
+    const activeLobbies = lobbies.filter(lobby => now - lobby.lastHeartbeat < 60000);
 
     if (region) {
         const filtered = activeLobbies.filter(lobby => lobby.region === region);
@@ -71,6 +71,25 @@ app.get('/lobby/:code', (req, res) => {
         return res.status(404).send('Lobby nicht gefunden');
     }
     res.json(lobby);
+});
+
+// Einzelne Lobby löschen (NEU)
+app.delete('/lobby/:code', (req, res) => {
+    const index = lobbies.findIndex(l => l.code === req.params.code);
+    if (index !== -1) {
+        lobbies.splice(index, 1);
+        console.log(`Lobby mit Code ${req.params.code} wurde gelöscht.`);
+        res.status(200).send('Lobby gelöscht');
+    } else {
+        res.status(404).send('Lobby nicht gefunden');
+    }
+});
+
+// Alle Lobbys löschen (optional Admin-Reset)
+app.delete('/lobbies', (req, res) => {
+    lobbies = [];
+    console.log('Alle Lobbys wurden gelöscht.');
+    res.status(200).send('Alle Lobbys gelöscht');
 });
 
 // Server starten
