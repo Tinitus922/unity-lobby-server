@@ -17,6 +17,7 @@ function generateLobbyCode(length = 10) {
     return code;
 }
 
+// Neue Lobby registrieren
 app.post('/register', (req, res) => {
     const { name, region, isPrivate } = req.body;
 
@@ -30,7 +31,8 @@ app.post('/register', (req, res) => {
         region,
         isPrivate: !!isPrivate,
         code: lobbyCode,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        lastHeartbeat: Date.now()  // NEU: Heartbeat-Zeit merken
     };
 
     lobbies.push(lobby);
@@ -38,17 +40,31 @@ app.post('/register', (req, res) => {
     res.status(200).json({ code: lobbyCode });
 });
 
+// Heartbeat aktualisieren
+app.post('/heartbeat/:code', (req, res) => {
+    const lobby = lobbies.find(l => l.code === req.params.code);
+    if (!lobby) {
+        return res.status(404).send('Lobby nicht gefunden');
+    }
+    lobby.lastHeartbeat = Date.now();
+    res.status(200).send('Heartbeat aktualisiert');
+});
+
+// Aktive Lobbys abrufen
 app.get('/lobbies', (req, res) => {
     const { region } = req.query;
+    const now = Date.now();
+    const activeLobbies = lobbies.filter(lobby => now - lobby.lastHeartbeat < 60000); // nur letzte 60 Sekunden aktiv
 
     if (region) {
-        const filtered = lobbies.filter(lobby => lobby.region === region);
+        const filtered = activeLobbies.filter(lobby => lobby.region === region);
         return res.json(filtered);
     }
 
-    res.json(lobbies);
+    res.json(activeLobbies);
 });
 
+// Einzelne Lobby abrufen
 app.get('/lobby/:code', (req, res) => {
     const lobby = lobbies.find(l => l.code === req.params.code);
     if (!lobby) {
@@ -57,6 +73,7 @@ app.get('/lobby/:code', (req, res) => {
     res.json(lobby);
 });
 
+// Server starten
 app.listen(port, () => {
     console.log(`Lobbyserver läuft auf http://localhost:${port}`);
 });
