@@ -7,13 +7,18 @@ app.use(cors());
 app.use(express.json());
 
 let lobbies = [];
+let usedCodes = new Set();  // NEU: Speicher für alle vergebenen Codes
 
 function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
-    for (let i = 0; i < length; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    do {
+        code = '';
+        for (let i = 0; i < length; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+    } while (usedCodes.has(code));  // prüfen, ob Code schon jemals vergeben wurde
+    usedCodes.add(code);
     return code;
 }
 
@@ -38,6 +43,40 @@ app.post('/register', (req, res) => {
     lobbies.push(lobby);
     console.log('Neue Lobby:', lobby);
     res.status(200).json({ code: lobbyCode });
+});
+
+// Rehost einer alten Lobby (NEU)
+app.post('/rehost/:code', (req, res) => {
+    const { name, region, isPrivate } = req.body;
+    const code = req.params.code;
+
+    if (!name || !region) {
+        return res.status(400).send('Fehlende Angaben (Name oder Region).');
+    }
+
+    // Prüfen, ob eine andere Lobby diesen Code aktuell verwendet
+    const existing = lobbies.find(l => l.code === code);
+    if (existing) {
+        return res.status(400).send('Dieser Code wird bereits von einer anderen aktiven Lobby verwendet.');
+    }
+
+    // Wenn der Code jemals vergeben wurde, akzeptieren wir ihn wieder (ansonsten ablehnen)
+    if (!usedCodes.has(code)) {
+        return res.status(404).send('Unbekannter Lobby-Code.');
+    }
+
+    const lobby = {
+        name,
+        region,
+        isPrivate: !!isPrivate,
+        code: code,
+        createdAt: Date.now(),
+        lastHeartbeat: Date.now()
+    };
+
+    lobbies.push(lobby);
+    console.log('Lobby rehosted:', lobby);
+    res.status(200).json({ code: code });
 });
 
 // Heartbeat aktualisieren
@@ -73,7 +112,7 @@ app.get('/lobby/:code', (req, res) => {
     res.json(lobby);
 });
 
-// Einzelne Lobby löschen (NEU)
+// Einzelne Lobby löschen
 app.delete('/lobby/:code', (req, res) => {
     const index = lobbies.findIndex(l => l.code === req.params.code);
     if (index !== -1) {
