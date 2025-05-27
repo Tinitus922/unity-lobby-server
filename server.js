@@ -62,10 +62,10 @@ function cleanUpExpiredLobbies() {
 app.post('/register', (req, res) => {
     cleanUpExpiredLobbies();
 
-    const { name, region, isPrivate } = req.body;
+    const { name, region, isPrivate, hostIp, port: hostPort } = req.body;
 
-    if (!name || !region) {
-        return res.status(400).send('Fehlende Angaben (Name oder Region).');
+    if (!name || !region || !hostIp || !hostPort) {
+        return res.status(400).send('Fehlende Angaben (Name, Region, Host-IP oder Port).');
     }
 
     const lobbyCode = generateLobbyCode();
@@ -74,6 +74,8 @@ app.post('/register', (req, res) => {
         region,
         isPrivate: !!isPrivate,
         code: lobbyCode,
+        hostIp,
+        port: hostPort,
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
@@ -87,11 +89,11 @@ app.post('/register', (req, res) => {
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
-    const { name, region, isPrivate } = req.body;
+    const { name, region, isPrivate, hostIp, port: hostPort } = req.body;
     const code = req.params.code;
 
-    if (!name || !region) {
-        return res.status(400).send('Fehlende Angaben (Name oder Region).');
+    if (!name || !region || !hostIp || !hostPort) {
+        return res.status(400).send('Fehlende Angaben (Name, Region, Host-IP oder Port).');
     }
 
     const existing = lobbies.find(l => l.code === code);
@@ -107,14 +109,16 @@ app.post('/rehost/:code', (req, res) => {
         name,
         region,
         isPrivate: !!isPrivate,
-        code: code,
+        code,
+        hostIp,
+        port: hostPort,
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
 
     lobbies.push(lobby);
     console.log('Lobby rehosted:', lobby);
-    res.status(200).json({ code: code });
+    res.status(200).json({ code });
 });
 
 // 🔹 Heartbeat aktualisieren
