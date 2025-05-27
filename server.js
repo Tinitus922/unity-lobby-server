@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -7,8 +8,31 @@ app.use(cors());
 app.use(express.json());
 
 let lobbies = [];
-let usedCodes = new Set();  // Speicher für alle jemals vergebenen Codes
+let usedCodes = new Set();
 
+// 🔹 Beim Start gespeicherte Codes aus Datei laden
+function loadUsedCodes() {
+    if (fs.existsSync('usedCodes.json')) {
+        try {
+            const data = fs.readFileSync('usedCodes.json', 'utf8');
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed)) {
+                usedCodes = new Set(parsed);
+                console.log(`Geladene Codes: ${parsed.length}`);
+            }
+        } catch (err) {
+            console.error('Fehler beim Laden der usedCodes.json:', err);
+        }
+    }
+}
+
+// 🔹 Nach jedem neuen Code: Codes in Datei speichern
+function saveUsedCodes() {
+    const codeArray = Array.from(usedCodes);
+    fs.writeFileSync('usedCodes.json', JSON.stringify(codeArray, null, 2), 'utf8');
+}
+
+// 🔹 Lobbycode generieren
 function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -19,10 +43,11 @@ function generateLobbyCode(length = 10) {
         }
     } while (usedCodes.has(code));
     usedCodes.add(code);
+    saveUsedCodes();
     return code;
 }
 
-// Cleanup-Funktion: entfernt abgelaufene Lobbys
+// 🔹 Cleanup: entferne alte Lobbys
 function cleanUpExpiredLobbies() {
     const now = Date.now();
     const beforeCount = lobbies.length;
@@ -33,7 +58,7 @@ function cleanUpExpiredLobbies() {
     }
 }
 
-// Neue Lobby registrieren
+// 🔹 Neue Lobby registrieren
 app.post('/register', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -58,7 +83,7 @@ app.post('/register', (req, res) => {
     res.status(200).json({ code: lobbyCode });
 });
 
-// Rehost einer alten Lobby
+// 🔹 Rehost einer alten Lobby
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -92,7 +117,7 @@ app.post('/rehost/:code', (req, res) => {
     res.status(200).json({ code: code });
 });
 
-// Heartbeat aktualisieren
+// 🔹 Heartbeat aktualisieren
 app.post('/heartbeat/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -104,7 +129,7 @@ app.post('/heartbeat/:code', (req, res) => {
     res.status(200).send('Heartbeat aktualisiert');
 });
 
-// Aktive Lobbys abrufen
+// 🔹 Aktive Lobbys abrufen
 app.get('/lobbies', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -120,7 +145,7 @@ app.get('/lobbies', (req, res) => {
     res.json(activeLobbies);
 });
 
-// Einzelne Lobby abrufen
+// 🔹 Einzelne Lobby abrufen
 app.get('/lobby/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -131,7 +156,7 @@ app.get('/lobby/:code', (req, res) => {
     res.json(lobby);
 });
 
-// Einzelne Lobby löschen
+// 🔹 Einzelne Lobby löschen
 app.delete('/lobby/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -145,7 +170,7 @@ app.delete('/lobby/:code', (req, res) => {
     }
 });
 
-// Alle Lobbys löschen (Admin-Reset)
+// 🔹 Alle Lobbys löschen
 app.delete('/lobbies', (req, res) => {
     const count = lobbies.length;
     lobbies = [];
@@ -153,7 +178,8 @@ app.delete('/lobbies', (req, res) => {
     res.status(200).send('Alle Lobbys gelöscht');
 });
 
-// Server starten
+// 🔹 Server starten
 app.listen(port, () => {
+    loadUsedCodes();
     console.log(`Lobbyserver läuft auf http://localhost:${port}`);
 });
