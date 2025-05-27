@@ -26,7 +26,7 @@ function loadUsedCodes() {
     }
 }
 
-// 🔹 Nach jedem neuen Code: Codes in Datei speichern
+// 🔹 Nach jedem neuen Code oder Löschung: Codes in Datei speichern
 function saveUsedCodes() {
     const codeArray = Array.from(usedCodes);
     fs.writeFileSync('usedCodes.json', JSON.stringify(codeArray, null, 2), 'utf8');
@@ -170,7 +170,21 @@ app.delete('/lobby/:code', (req, res) => {
     }
 });
 
-// 🔹 Alle Lobbys löschen
+// 🔹 Einzelnen UsedCode löschen
+app.delete('/usedcode/:code', (req, res) => {
+    const code = req.params.code;
+
+    if (usedCodes.has(code)) {
+        usedCodes.delete(code);
+        saveUsedCodes();
+        console.log(`UsedCode ${code} wurde entfernt und Datei aktualisiert.`);
+        res.status(200).send('UsedCode entfernt');
+    } else {
+        res.status(404).send('UsedCode nicht gefunden');
+    }
+});
+
+// 🔹 Alle Lobbys löschen (Admin-Reset)
 app.delete('/lobbies', (req, res) => {
     const count = lobbies.length;
     lobbies = [];
