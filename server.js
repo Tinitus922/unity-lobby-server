@@ -103,15 +103,15 @@ app.post('/updateRelayCode/:code', (req, res) => {
     res.status(200).send('RelayJoinCode aktualisiert');
 });
 
-// 🔹 Rehost einer Lobby
+// 🔹 Rehost einer Lobby (jetzt ohne Pflichtfeld relayJoinCode)
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
     const { name, region, isPrivate, relayJoinCode } = req.body;
     const code = req.params.code;
 
-    if (!name || !region || !relayJoinCode) {
-        return res.status(400).send('Fehlende Angaben (Name, Region oder Relay JoinCode).');
+    if (!name || !region) {
+        return res.status(400).send('Fehlende Angaben (Name oder Region).');
     }
 
     if (!usedCodes.has(code)) {
@@ -128,7 +128,7 @@ app.post('/rehost/:code', (req, res) => {
         region,
         isPrivate: !!isPrivate,
         code,
-        relayJoinCode,
+        relayJoinCode: relayJoinCode || null,  // nur setzen, wenn mitgegeben
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
