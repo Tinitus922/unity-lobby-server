@@ -62,10 +62,10 @@ function cleanUpExpiredLobbies() {
 app.post('/register', (req, res) => {
     cleanUpExpiredLobbies();
 
-    const { name, region, isPrivate, relayJoinCode } = req.body;
+    const { name, region, isPrivate } = req.body;
 
-    if (!name || !region || !relayJoinCode) {
-        return res.status(400).send('Fehlende Angaben (Name, Region oder Relay JoinCode).');
+    if (!name || !region) {
+        return res.status(400).send('Fehlende Angaben (Name oder Region).');
     }
 
     const lobbyCode = generateLobbyCode();
@@ -74,7 +74,7 @@ app.post('/register', (req, res) => {
         region,
         isPrivate: !!isPrivate,
         code: lobbyCode,          // 10-stelliger Code
-        relayJoinCode,           // 6-stelliger Relay JoinCode
+        relayJoinCode: null,      // Wird später aktualisiert
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
@@ -82,6 +82,25 @@ app.post('/register', (req, res) => {
     lobbies.push(lobby);
     console.log('Neue Lobby registriert:', lobby);
     res.status(200).json({ code: lobbyCode });
+});
+
+// 🔹 Relay-Code aktualisieren
+app.post('/updateRelayCode/:code', (req, res) => {
+    const code = req.params.code;
+    const { relayJoinCode } = req.body;
+
+    const lobby = lobbies.find(l => l.code === code);
+    if (!lobby) {
+        return res.status(404).send('Lobby nicht gefunden');
+    }
+
+    if (!relayJoinCode) {
+        return res.status(400).send('Fehlender Relay JoinCode.');
+    }
+
+    lobby.relayJoinCode = relayJoinCode;
+    console.log(`RelayJoinCode für Lobby ${code} aktualisiert: ${relayJoinCode}`);
+    res.status(200).send('RelayJoinCode aktualisiert');
 });
 
 // 🔹 Rehost einer Lobby
