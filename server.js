@@ -10,7 +10,7 @@ app.use(express.json());
 let lobbies = [];
 let usedCodes = new Set();
 
-// 🔹 Beim Start gespeicherte Codes aus Datei laden
+// 🔹 Codes aus Datei laden
 function loadUsedCodes() {
     if (fs.existsSync('usedCodes.json')) {
         try {
@@ -26,13 +26,13 @@ function loadUsedCodes() {
     }
 }
 
-// 🔹 Nach jedem neuen Code oder Löschung: Codes in Datei speichern
+// 🔹 Codes in Datei speichern
 function saveUsedCodes() {
     const codeArray = Array.from(usedCodes);
     fs.writeFileSync('usedCodes.json', JSON.stringify(codeArray, null, 2), 'utf8');
 }
 
-// 🔹 Lobbycode generieren
+// 🔹 10-stelligen Lobby-Code generieren
 function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -47,7 +47,7 @@ function generateLobbyCode(length = 10) {
     return code;
 }
 
-// 🔹 Cleanup: entferne alte Lobbys
+// 🔹 Alte Lobbys bereinigen
 function cleanUpExpiredLobbies() {
     const now = Date.now();
     const beforeCount = lobbies.length;
@@ -62,10 +62,10 @@ function cleanUpExpiredLobbies() {
 app.post('/register', (req, res) => {
     cleanUpExpiredLobbies();
 
-    const { name, region, isPrivate, hostIp, port: hostPort } = req.body;
+    const { name, region, isPrivate, relayJoinCode } = req.body;
 
-    if (!name || !region || !hostIp || !hostPort) {
-        return res.status(400).send('Fehlende Angaben (Name, Region, Host-IP oder Port).');
+    if (!name || !region || !relayJoinCode) {
+        return res.status(400).send('Fehlende Angaben (Name, Region oder Relay JoinCode).');
     }
 
     const lobbyCode = generateLobbyCode();
@@ -73,27 +73,30 @@ app.post('/register', (req, res) => {
         name,
         region,
         isPrivate: !!isPrivate,
-        code: lobbyCode,
-        hostIp,
-        port: hostPort,
+        code: lobbyCode,          // 10-stelliger Code
+        relayJoinCode,           // 6-stelliger Relay JoinCode
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
 
     lobbies.push(lobby);
-    console.log('Neue Lobby:', lobby);
+    console.log('Neue Lobby registriert:', lobby);
     res.status(200).json({ code: lobbyCode });
 });
 
-// 🔹 Rehost einer alten Lobby
+// 🔹 Rehost einer Lobby
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
-    const { name, region, isPrivate, hostIp, port: hostPort } = req.body;
+    const { name, region, isPrivate, relayJoinCode } = req.body;
     const code = req.params.code;
 
-    if (!name || !region || !hostIp || !hostPort) {
-        return res.status(400).send('Fehlende Angaben (Name, Region, Host-IP oder Port).');
+    if (!name || !region || !relayJoinCode) {
+        return res.status(400).send('Fehlende Angaben (Name, Region oder Relay JoinCode).');
+    }
+
+    if (!usedCodes.has(code)) {
+        return res.status(404).send('Unbekannter Lobby-Code.');
     }
 
     const existing = lobbies.find(l => l.code === code);
@@ -101,17 +104,12 @@ app.post('/rehost/:code', (req, res) => {
         return res.status(400).send('Dieser Code wird bereits von einer anderen aktiven Lobby verwendet.');
     }
 
-    if (!usedCodes.has(code)) {
-        return res.status(404).send('Unbekannter Lobby-Code.');
-    }
-
     const lobby = {
         name,
         region,
         isPrivate: !!isPrivate,
         code,
-        hostIp,
-        port: hostPort,
+        relayJoinCode,
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
