@@ -10,10 +10,9 @@ app.use(express.json());
 let lobbies = [];
 let usedCodes = new Set();
 
-const SUPABASE_URL = 'https://gyctqcslrpsiqpjwvqxj.supabase.co';  // deine Project URL
+const SUPABASE_URL = 'https://gyctqcslrpsiqpjwvqxj.supabase.co';
 const SUPABASE_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5Y3RxY3NscnBzaXFwand2cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjU3MjksImV4cCI6MjA2NDEwMTcyOX0.hIuobCZj0FexHKLedMM7a4dS_OfoJ4b0BbLsxKBbBdM';
 
-// 🔹 Codes aus Supabase laden
 async function loadUsedCodesFromSupabase() {
     try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/usedcodes?select=code`, {
@@ -37,7 +36,6 @@ async function loadUsedCodesFromSupabase() {
     }
 }
 
-// 🔹 Code in Supabase speichern
 async function saveCodeToSupabase(code) {
     try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/usedcodes`, {
@@ -61,7 +59,29 @@ async function saveCodeToSupabase(code) {
     }
 }
 
-// 🔹 10-stelligen Lobby-Code generieren
+async function deleteCodeFromSupabase(code) {
+    try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/usedcodes?code=eq.${code}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': `Bearer ${SUPABASE_API_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            console.error('Fehler beim Löschen in Supabase:', await response.text());
+            return false;
+        }
+
+        console.log(`✅ UsedCode ${code} erfolgreich aus Supabase gelöscht.`);
+        return true;
+    } catch (err) {
+        console.error('Fehler beim Löschen des Codes:', err);
+        return false;
+    }
+}
+
 async function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -73,11 +93,10 @@ async function generateLobbyCode(length = 10) {
     } while (usedCodes.has(code));
 
     usedCodes.add(code);
-    await saveCodeToSupabase(code);  // nur noch Supabase, keine lokale Datei
+    await saveCodeToSupabase(code);
     return code;
 }
 
-// 🔹 Alte Lobbys bereinigen
 function cleanUpExpiredLobbies() {
     const now = Date.now();
     const beforeCount = lobbies.length;
@@ -88,7 +107,6 @@ function cleanUpExpiredLobbies() {
     }
 }
 
-// 🔹 Neue Lobby registrieren
 app.post('/register', async (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -114,7 +132,6 @@ app.post('/register', async (req, res) => {
     res.status(200).json({ code: lobbyCode });
 });
 
-// 🔹 Relay-Code aktualisieren
 app.post('/updateRelayCode/:code', (req, res) => {
     const code = req.params.code;
     const { relayJoinCode } = req.body;
@@ -133,7 +150,6 @@ app.post('/updateRelayCode/:code', (req, res) => {
     res.status(200).send('RelayJoinCode aktualisiert');
 });
 
-// 🔹 Rehost einer Lobby
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -168,7 +184,6 @@ app.post('/rehost/:code', (req, res) => {
     res.status(200).json({ code });
 });
 
-// 🔹 Heartbeat aktualisieren
 app.post('/heartbeat/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -180,7 +195,6 @@ app.post('/heartbeat/:code', (req, res) => {
     res.status(200).send('Heartbeat aktualisiert');
 });
 
-// 🔹 Aktive Lobbys abrufen
 app.get('/lobbies', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -196,7 +210,6 @@ app.get('/lobbies', (req, res) => {
     res.json(activeLobbies);
 });
 
-// 🔹 Einzelne Lobby abrufen
 app.get('/lobby/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -207,7 +220,6 @@ app.get('/lobby/:code', (req, res) => {
     res.json(lobby);
 });
 
-// 🔹 Einzelne Lobby löschen
 app.delete('/lobby/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -221,7 +233,25 @@ app.delete('/lobby/:code', (req, res) => {
     }
 });
 
-// 🔹 Server starten
+// 🔹 NEU: UsedCode löschen (lokal + Supabase)
+app.delete('/usedcode/:code', async (req, res) => {
+    const code = req.params.code;
+
+    if (usedCodes.has(code)) {
+        usedCodes.delete(code);
+        console.log(`UsedCode ${code} aus local Set entfernt.`);
+    } else {
+        console.log(`UsedCode ${code} war nicht im local Set.`);
+    }
+
+    const success = await deleteCodeFromSupabase(code);
+    if (success) {
+        res.status(200).send('UsedCode erfolgreich gelöscht (local + Supabase).');
+    } else {
+        res.status(500).send('Fehler beim Löschen aus Supabase.');
+    }
+});
+
 app.listen(port, async () => {
     await loadUsedCodesFromSupabase();
     console.log(`Lobbyserver läuft auf http://localhost:${port}`);
