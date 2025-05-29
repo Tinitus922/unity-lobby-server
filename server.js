@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const fetch = require('node-fetch');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -10,30 +10,59 @@ app.use(express.json());
 let lobbies = [];
 let usedCodes = new Set();
 
-// 🔹 Codes aus Datei laden
-function loadUsedCodes() {
-    if (fs.existsSync('usedCodes.json')) {
-        try {
-            const data = fs.readFileSync('usedCodes.json', 'utf8');
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed)) {
-                usedCodes = new Set(parsed);
-                console.log(`Geladene Codes: ${parsed.length}`);
+const SUPABASE_URL = 'https://gyctqcslrpsiqpwjvxqj.supabase.co';  // deine Project URL
+const SUPABASE_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5Y3RxY3NscnBzaXFwand2cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjU3MjksImV4cCI6MjA2NDEwMTcyOX0.hIuobCZj0FexHKLedMM7a4dS_OfoJ4b0BbLsxKBbBdM';
+
+// 🔹 Codes aus Supabase laden
+async function loadUsedCodesFromSupabase() {
+    try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/usedcodes?select=code`, {
+            method: 'GET',
+            headers: {
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': `Bearer ${SUPABASE_API_KEY}`
             }
-        } catch (err) {
-            console.error('Fehler beim Laden der usedCodes.json:', err);
+        });
+
+        if (!response.ok) {
+            console.error('Fehler beim Laden der Codes aus Supabase:', await response.text());
+            return;
         }
+
+        const data = await response.json();
+        usedCodes = new Set(data.map(entry => entry.code));
+        console.log(`Geladene Codes aus Supabase: ${usedCodes.size}`);
+    } catch (err) {
+        console.error('Fehler beim Laden der usedCodes:', err);
     }
 }
 
-// 🔹 Codes in Datei speichern
-function saveUsedCodes() {
-    const codeArray = Array.from(usedCodes);
-    fs.writeFileSync('usedCodes.json', JSON.stringify(codeArray, null, 2), 'utf8');
+// 🔹 Code in Supabase speichern
+async function saveCodeToSupabase(code) {
+    try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/usedcodes`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify([{ code }])
+        });
+
+        if (!response.ok) {
+            console.error('Fehler beim Speichern in Supabase:', await response.text());
+        } else {
+            console.log('✅ Code erfolgreich in Supabase gespeichert:', code);
+        }
+    } catch (err) {
+        console.error('Fehler beim Speichern des Codes:', err);
+    }
 }
 
 // 🔹 10-stelligen Lobby-Code generieren
-function generateLobbyCode(length = 10) {
+async function generateLobbyCode(length = 10) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
     do {
@@ -42,8 +71,9 @@ function generateLobbyCode(length = 10) {
             code += chars.charAt(Math.floor(Math.random() * chars.length));
         }
     } while (usedCodes.has(code));
+
     usedCodes.add(code);
-    saveUsedCodes();
+    await saveCodeToSupabase(code);  // nur noch Supabase, keine lokale Datei
     return code;
 }
 
@@ -59,7 +89,7 @@ function cleanUpExpiredLobbies() {
 }
 
 // 🔹 Neue Lobby registrieren
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
     cleanUpExpiredLobbies();
 
     const { name, region, isPrivate } = req.body;
@@ -68,13 +98,13 @@ app.post('/register', (req, res) => {
         return res.status(400).send('Fehlende Angaben (Name oder Region).');
     }
 
-    const lobbyCode = generateLobbyCode();
+    const lobbyCode = await generateLobbyCode();
     const lobby = {
         name,
         region,
         isPrivate: !!isPrivate,
-        code: lobbyCode,          // 10-stelliger Code
-        relayJoinCode: null,      // Wird später aktualisiert
+        code: lobbyCode,
+        relayJoinCode: null,
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
@@ -103,7 +133,7 @@ app.post('/updateRelayCode/:code', (req, res) => {
     res.status(200).send('RelayJoinCode aktualisiert');
 });
 
-// 🔹 Rehost einer Lobby (jetzt ohne Pflichtfeld relayJoinCode)
+// 🔹 Rehost einer Lobby
 app.post('/rehost/:code', (req, res) => {
     cleanUpExpiredLobbies();
 
@@ -128,7 +158,7 @@ app.post('/rehost/:code', (req, res) => {
         region,
         isPrivate: !!isPrivate,
         code,
-        relayJoinCode: relayJoinCode || null,  // nur setzen, wenn mitgegeben
+        relayJoinCode: relayJoinCode || null,
         createdAt: Date.now(),
         lastHeartbeat: Date.now()
     };
@@ -191,30 +221,8 @@ app.delete('/lobby/:code', (req, res) => {
     }
 });
 
-// 🔹 Einzelnen UsedCode löschen
-app.delete('/usedcode/:code', (req, res) => {
-    const code = req.params.code;
-
-    if (usedCodes.has(code)) {
-        usedCodes.delete(code);
-        saveUsedCodes();
-        console.log(`UsedCode ${code} wurde entfernt und Datei aktualisiert.`);
-        res.status(200).send('UsedCode entfernt');
-    } else {
-        res.status(404).send('UsedCode nicht gefunden');
-    }
-});
-
-// 🔹 Alle Lobbys löschen (Admin-Reset)
-app.delete('/lobbies', (req, res) => {
-    const count = lobbies.length;
-    lobbies = [];
-    console.log(`Alle Lobbys (${count}) wurden gelöscht.`);
-    res.status(200).send('Alle Lobbys gelöscht');
-});
-
 // 🔹 Server starten
-app.listen(port, () => {
-    loadUsedCodes();
+app.listen(port, async () => {
+    await loadUsedCodesFromSupabase();
     console.log(`Lobbyserver läuft auf http://localhost:${port}`);
 });
